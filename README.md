@@ -1,13 +1,13 @@
-# 🚗 보안 CAN-FD 차량 네트워크 기반 AI 대리운전 시스템
+# 🚗 보안 CAN 차량 네트워크 기반 자율주행 시스템
 
-> **ATmega328P + ERIKA Enterprise RTOS** 기반의 2-ECU 보안 통신 임베디드 프로젝트
-> 센서 ECU가 수집한 주행 데이터를 **암호화·서명**하여 CAN-FD로 전송하고, 제어 ECU가 이를 **검증·복호화**한 뒤 차량 모델로 엔진 RPM을 산출합니다.
+> **ATmega328P + ERIKA Enterprise RTOS** 기반의 보안 통신 임베디드 프로젝트
+> 센서 ECU가 수집한 주행 데이터를 **암호화·서명**하여 CAN으로 전송하고, 제어 ECU가 이를 **검증·복호화**한 뒤 차량 모델로 엔진 RPM을 산출합니다.
 
 ---
 
 ## 📖 개요
 
-자율주행/대리운전 시나리오를 가정한 차량 내부 네트워크(IVN) 보안 데모입니다. 두 대의 Arduino UNO(ATmega328P)를 OSEK/VDX 호환 실시간 운영체제인 **ERIKA Enterprise(ERIKA3)** 위에서 구동하고, 그 사이에 **OP-TEE(ARM TrustZone 기반 신뢰실행환경)** 가 탑재된 **NVIDIA Jetson Orin Nano** 를 **보안 게이트웨이**로 두는 **3-노드 구조**입니다. 노드 간 통신은 **MCP2517FD CAN-FD 컨트롤러**(ACAN2517FD 라이브러리)로 수행합니다.
+자율주행 시나리오를 가정한 차량 내부 네트워크(IVN) 보안 데모입니다. 두 대의 Arduino UNO(ATmega328P)를 OSEK/VDX 호환 실시간 운영체제인 **ERIKA Enterprise(ERIKA3)** 위에서 구동하고, 그 사이에 **OP-TEE(ARM TrustZone 기반 신뢰실행환경)** 가 탑재된 **NVIDIA Jetson Orin Nano** 를 **보안 게이트웨이**로 두는 **3-노드 구조**입니다. 노드 간 통신은 **MCP2517FD 컨트롤러**(ACAN2517FD 라이브러리)를 이용한 **클래식 CAN(CAN 2.0) 프레임**으로 수행합니다.
 
 핵심은 차량 ECU 간 메시지를 평문으로 주고받지 않고, 경량 **대칭키 암호(simple-DES)** 로 도청을 막고, 게이트웨이가 **CAN ID 화이트리스트 검증**과 **공개키 서명(micro-RSA) 부착**을 수행하여 위·변조와 비인가 송신원을 차단하는 것입니다.
 
@@ -80,6 +80,32 @@ flowchart LR
 2. **Orin Nano(OP-TEE)**: `0x123` 화이트리스트 확인 → 개인키로 3-byte 서명 생성 → ID를 `0x456`으로 바꿔 `[0:5]`=암호문, `[5:8]`=서명으로 재전송
 3. **Node2**: `0x456` 수신 → `micro_verify()` 서명검증 → DES 복호화 → 카메라 방향에 따라 `SensorTask` 이벤트 트리거 → 라이다 거리(`<500`)와 결합하여 회피/기본 모드로 `control_rpm()` 호출
 
+## 🎬 동작 결과 (Demo)
+
+데이터가 **Node1 → OP-TEE 게이트웨이 → Node2** 로 흐르며 암호화·서명·검증되는 전 과정을 실제 시리얼/터미널 캡처로 정리했습니다.
+
+### 1️⃣ Node1 — 센서 수집 & 암호화 송신
+![Node1 송신 시리얼](assets/images/demo-1-node1-tx.png)
+
+`raw`(원본 센서값: throttle·lidar·camera)를 DES로 암호화한 결과가 `enc` 입니다. 이 5바이트와 빈 서명자리(`0 0 0`)를 CAN `0x123` 으로 송신합니다.
+
+### 2️⃣ Orin Nano(OP-TEE) — 화이트리스트 검증 & 서명 생성
+![OP-TEE 게이트웨이](assets/images/demo-2-optee-gateway.png)
+
+ARM TrustZone 보안 영역(OP-TEE TA)에서 `whitelist = 0x123` 와 `private_key` 를 저장하고, 메시지에 대한 3바이트 서명을 만들어 **`signature generated successfully!`** 를 출력합니다. 이후 CAN ID를 `0x456` 으로 변환하여 Node2로 전달합니다.
+
+### 3️⃣ Node2 — 서명 검증 & 복호화
+![Node2 검증 시리얼](assets/images/demo-3-node2-verify.png)
+
+수신한 `enc + sig` 에 대해 `micro_verify` 결과가 **`1`(성공)** 이고 `Hash` 와 `decrypted_sig` 가 일치합니다. 검증을 통과하면 복호화하여 원본 `raw` 센서값을 복원합니다.
+
+### 4️⃣ Node2 — 차량 모델 RPM 제어
+![RPM 제어 시리얼](assets/images/demo-4-node2-rpm.png)
+
+복원한 센서값으로 `control_rpm()` 을 호출합니다. 카메라가 물체를 감지(`Front`/`Left`/`Right`)하고 라이다 거리가 임계값(500) 이하이면 **회피 모드**로 RPM을 낮추고(`rpm:1000`), 미감지(`None`)면 **정상 주행**(`rpm:3659`)으로 동작합니다.
+
+> 🎥 위 캡처는 발표 시연 영상의 핵심 장면입니다. (전체 동작 영상은 대용량 관계로 저장소에 포함하지 않았습니다.)
+
 ## 📂 디렉토리 구조
 
 ```
@@ -88,7 +114,7 @@ flowchart LR
 │   ├── asw.c               # 애플리케이션 SW (태스크/ISR: ADC 수집·암호화·송신)
 │   ├── bsw.cpp / bsw.h     # 기반 SW (CAN 드라이버 래퍼, DES 암호, 시리얼)
 │   ├── SPI.cpp / SPI.h     # SPI 드라이버
-│   ├── 1.html              # AI 대리운전 UI 프로토타입(웹)
+│   ├── 1.html              # 자율주행 UI 프로토타입(웹)
 │   ├── conf.oil            # ERIKA OS 구성 (태스크/알람/ISR 정의)
 │   ├── Makefile            # 코드생성·빌드·업로드
 │   └── lib/ACAN2517FD/     # MCP2517FD CAN-FD 컨트롤러 라이브러리
@@ -102,7 +128,8 @@ flowchart LR
 │   ├── makefile
 │   └── lib/ACAN2517FD/
 │
-└── docs/                   # 발표자료·평가항목·OP-TEE 가이드라인
+├── assets/images/          # README용 동작 결과 캡처
+└── docs/                   # 발표 PDF·평가항목·OP-TEE 가이드라인
 ```
 
 > `erika/`, `out/` 디렉토리는 `make config`·`make build` 시 자동 생성되는 산출물이므로 `.gitignore` 처리되어 있습니다.
@@ -114,8 +141,8 @@ flowchart LR
 | ECU (Node1·Node2) | ATmega328P (Arduino UNO) |
 | 보안 게이트웨이 | NVIDIA Jetson Orin Nano + OP-TEE (ARM TrustZone) |
 | RTOS (ECU) | ERIKA Enterprise (ERIKA3), OSEK ECC2 |
-| CAN 컨트롤러 | MCP2517FD (CAN-FD), SPI 연결 — CS: D9, INT: D2 |
-| CAN 설정 | 20 MHz 오실레이터, 500 kbps, NormalFD 모드 |
+| CAN 컨트롤러 | MCP2517FD (CAN-FD 지원 칩), SPI 연결 — CS: D9, INT: D2 |
+| CAN 통신 | **클래식 CAN 2.0 프레임**(`CAN_DATA`, 8-byte), 500 kbps, 비트레이트 스위치 미사용 |
 | 시리얼 | 115200 bps |
 
 ## ⚙️ 빌드 & 업로드
@@ -144,7 +171,10 @@ make upload     # avrdude 로 보드에 플래시
 
 ## 👥 팀
 
-김경재 · 조정빈 — 최종 프로젝트
+| 이름 | 담당 |
+|------|------|
+| **조정빈** | Node1 — 센서 ECU |
+| **김경재** | Node2 — 제어 ECU |
 
 ---
 *본 저장소는 학습/연구 목적의 임베디드 차량 보안 프로토타입입니다.*
