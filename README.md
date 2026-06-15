@@ -107,7 +107,14 @@ ARM TrustZone 보안 영역(OP-TEE TA)에서 `whitelist = 0x123` 와 `private_ke
 
 복원한 센서값으로 `control_rpm()` 을 호출합니다. 카메라가 물체를 감지(`Front`/`Left`/`Right`)하고 라이다 거리가 임계값(500) 이하이면 **회피 모드**로 RPM을 낮추고(`rpm:1000`), 미감지(`None`)면 **정상 주행**(`rpm:3659`)으로 동작합니다.
 
-> 🎥 위 캡처는 발표 시연 영상의 핵심 장면입니다. (전체 동작 영상은 대용량 관계로 저장소에 포함하지 않았습니다.)
+## 🎥 시연 영상
+
+데이터 흐름(① → ② → ③) 순서로 각 노드의 실제 동작 영상입니다. **썸네일을 클릭하면 유튜브로 이동**합니다.
+
+| ① Node1 — 센서·암호화 | ② Orin Nano — OP-TEE | ③ Node2 — 검증·RPM 제어 |
+|:---:|:---:|:---:|
+| [![Node1 동작](https://img.youtube.com/vi/Tj3xIFcjZZo/hqdefault.jpg)](https://youtu.be/Tj3xIFcjZZo) | [![OP-TEE 동작](https://img.youtube.com/vi/tUidN5c58tw/hqdefault.jpg)](https://youtu.be/tUidN5c58tw) | [![Node2 동작](https://img.youtube.com/vi/ZAuceCu_vr0/hqdefault.jpg)](https://youtu.be/ZAuceCu_vr0) |
+| 센서 수집 → DES 암호화 → CAN `0x123` 송신 | 화이트리스트 검증 → 서명 생성 → ID `0x456` 변환 | 서명검증·복호화 → 카메라/라이다 기반 RPM 제어 |
 
 ## 📂 디렉토리 구조
 
