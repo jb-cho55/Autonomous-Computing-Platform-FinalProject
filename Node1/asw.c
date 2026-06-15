@@ -22,7 +22,7 @@ TASK (Task1){
     send_msg.id = 0x123;
     unsigned int len = 8;
     send_msg.len = len;
-    unsigned char* buf_send = (unsigned char*)malloc(sizeof(unsigned char)*len);
+    unsigned char buf_send[8];
 
 	ActivateTask(TASK_readADC);
     
@@ -60,7 +60,6 @@ TASK (Task1){
 
     send_msg.buf = buf_send;
     CAN_sendMsg(send_msg);
-    free(buf_send);
 	TerminateTask();
 }
 

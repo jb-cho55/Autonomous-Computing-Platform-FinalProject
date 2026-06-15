@@ -46,7 +46,9 @@ byte CAN_readMsg(can_msg *msg)
         CAN.receive(message);
 		msg->id=message.id;
 		msg->len=message.len;
-		msg->buf=message.data;
+		static unsigned char rx_buf[8];
+		memcpy(rx_buf, message.data, message.len <= 8 ? message.len : 8);
+		msg->buf=rx_buf;
         return true;
     }
     return false;
@@ -90,7 +92,7 @@ void setup(void)
 
 	while (CAN_OK != begin()) {
 		printfSerial("init fail\n");
-		printfSerial("%d\n",begin());
+		printfSerial("retry\n");
 	}
 	OsEE_atmega_startTimer1(TIMER1_US);
 	printfSerial("CAN init\n");

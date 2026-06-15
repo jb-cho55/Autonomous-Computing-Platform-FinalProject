@@ -13,13 +13,13 @@ CPU mySystem {
 			VARIANT = CC {
 				VERSION = "1.8.16";
 			};
-			STAND_ALONE = TRUE;		
+			STAND_ALONE = TRUE;
 		};
 		KERNEL_TYPE = OSEK {
-			CLASS = ECC2;	
+			CLASS = ECC2;
 		};
 	};
-	
+
 	APPDATA myApp {
 		APP_SRC = "bsw.cpp";
 		APP_SRC = "asw.c";
@@ -27,7 +27,7 @@ CPU mySystem {
 		APP_SRC = "../lib/ACAN2517FD/ACAN2517FD.cpp";
 		APP_SRC = "../lib/ACAN2517FD/ACAN2517FDSettings.cpp";
 		APP_SRC = "Car_Model.cpp";
-		
+
 	};
 
 	ISR TimerISR {
@@ -47,13 +47,17 @@ CPU mySystem {
 		ACTION = ACTIVATETASK {
 			TASK = ReadCAN;
 		};
-		
+
 		AUTOSTART = TRUE {
 			ALARMTIME = 5;
 			CYCLETIME = 1;
 		};
 	};
 	//write below
+
+	RESOURCE ResRpm {
+		RESOURCEPROPERTY = STANDARD;
+	};
 
 	EVENT EventFront { MASK = AUTO; };
 	EVENT EventLeft { MASK = AUTO; };
@@ -72,6 +76,7 @@ CPU mySystem {
 		EVENT = EventFront;
 		EVENT = EventLeft;
 		EVENT = EventRight;
+		RESOURCE = ResRpm;
 	};
 
 	TASK ReadCAN {
@@ -79,9 +84,9 @@ CPU mySystem {
 		STACK = SHARED;
 		SCHEDULE = FULL;
 		AUTOSTART = FALSE;
-		ACTIVATION = 1;		
+		ACTIVATION = 1;
 	};
 
 
-	
+
 };
