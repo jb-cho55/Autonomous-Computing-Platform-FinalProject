@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 대리운전 프로토타입</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:sans-serif}
+    body,html{height:100%;background:#fafafa}
+    .screen{display:none;flex-direction:column;height:100%;padding:16px;overflow-y:auto}
+    .active{display:flex}
+    header{font-weight:700;font-size:1.2rem;margin-bottom:8px}
+    .map{width:100%;height:220px;border-radius:8px;background:#ddd;margin-bottom:12px;overflow:hidden}
+    .map img{width:100%;height:100%;object-fit:cover}
+    button,input{width:100%;padding:12px;border-radius:8px;font-size:1rem}
+    button{border:none;cursor:pointer;background:#007bff;color:#fff;margin-top:12px}
+    button.secondary{background:#eaeaea;color:#333}
+    .info{font-size:.9rem;margin-top:4px;color:#444}
+    .nav{position:fixed;bottom:0;left:0;width:100%;display:flex;border-top:1px solid #ddd;background:#fff}
+    .nav button{flex:1;border:none;padding:14px 0;font-size:.9rem;color:#007bff;background:#fff}
+    .nav button+button{border-left:1px solid #ddd}
+    .video-wrapper{position:relative;margin-top:12px}
+    video{width:100%;border-radius:8px}
+    .caption{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);padding:4px 12px;border-radius:4px;font-weight:700;color:#fff;background:rgba(255,0,0,.85);display:none}
+    .caption.ok{background:rgba(0,0,0,.6)}
+    .del-btn{position:absolute;top:8px;right:8px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:16px;line-height:24px;padding:0}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <!-- 요청 화면 -->
+  <div id="req" class="screen active">
+    <header>승객 요청</header>
+    <div class="map"><img id="routeImg" src="https://via.placeholder.com/400x300?text=지도" alt="map" /></div>
+    <button id="locBtn">📍 현재 위치 가져오기</button>
+    <div id="originLabel" class="info">위치: -</div>
+    <input id="destInput" placeholder="목적지 주소 입력" />
+    <button id="destBtn" class="secondary">검색</button>
+    <div id="destLabel" class="info">목적지: -</div>
+    <div id="distLabel" class="info">거리: -</div>
+    <div id="fareLabel" class="info">요금: -</div>
+    <button id="callBtn">호출</button>
+  </div>
+
+  <!-- 매칭 화면 -->
+  <div id="match" class="screen">
+    <header>매칭 중…</header>
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;">
+      <div style="width:120px;height:120px;border:8px solid #007bff;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+      <p style="margin-top:16px">기사를 찾는 중…</p>
+    </div>
+    <button class="secondary" id="cancelMatch">취소</button>
+  </div>
+
+  <!-- 운행 중 화면 -->
+  <div id="ride" class="screen">
+    <header>운행 중</header>
+    <div class="map"><img id="onRouteImg" src="https://via.placeholder.com/400x300?text=On+Route" alt="map" /></div>
+    <div style="display:flex;justify-content:space-between;font-size:.9rem;margin-top:8px"><span id="eta">도착예정 —</span><span id="speed">-- km/h</span></div>
+    <input type="file" id="videoInput" accept="video/*" multiple style="margin-top:12px" />
+    <div id="gallery"></div>
+    <button class="secondary" id="endRide" style="margin-top:16px">탑승 종료</button>
+  </div>
+
+  <!-- 요약 화면 -->
+  <div id="summary" class="screen">
+    <header>운행 요약</header>
+    <div class="info" id="sumFare">요금: -</div>
+    <div class="info" id="sumDist">거리/시간: -</div>
+    <button id="newCall">새 호출</button>
+  </div>
+
+  <!-- 기사 목록 화면 -->
+  <div id="drivers" class="screen">
+    <header>기사 목록</header>
+    <div id="driverList" style="flex:1;overflow-y:auto;margin-top:8px"></div>
+    <button class="secondary" id="backFromDrivers">뒤로</button>
+  </div>
+
+  <!-- nav -->
+  <div class="nav"><button id="navReq">호출</button><button id="navDrivers">기사 목록</button></div>
+
+<script>
+(()=>{
+  const GMAPS_KEY='YOUR_STATIC_MAPS_KEY_HERE';
+  const cfg={base:2000,perM:1.5};
+  let origin=null,dest=null,dist=0,fare=0,vCnt=0;
+
+  const $=id=>document.getElementById(id);
+  const show=id=>{document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');if(id==='drivers')renderDrivers();if(id==='match')setTimeout(()=>show('ride'),1500);};
+
+  function getLocation(){if(!navigator.geolocation)return alert('Geolocation 미지원');navigator.geolocation.getCurrentPosition(p=>{origin={lat:p.coords.latitude,lng:p.coords.longitude};$('originLabel').textContent=`위치: (${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)})`;updateMap();calcFare();},()=>alert('위치 오류'));}
+
+  function searchDest(){const q=$('destInput').value.trim();if(!q)return alert('주소 입력');fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`).then(r=>r.json()).then(d=>{if(!d.length)return alert('결과 없음');const {lat,lon,display_name}=d[0];dest={lat:+lat,lng:+lon,name:display_name};$('destLabel').textContent=`목적지: ${display_name}`;updateMap();calcFare();}).catch(()=>alert('검색 오류'));}
+
+  function calcFare(){if(!origin||!dest)return;const R=6371000,rad=Math.PI/180;const dLat=(dest.lat-origin.lat)*rad,dLon=(dest.lng-origin.lng)*rad;const a=Math.sin(dLat/2)**2+Math.cos(origin.lat*rad)*Math.cos(dest.lat*rad)*Math.sin(dLon/2)**2;dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));fare=Math.round(cfg.base+dist*cfg.perM);$('distLabel').textContent=`거리: ${Math.round(dist)} m`;$('fareLabel').textContent=`요금: ₩${fare.toLocaleString()}`;}
+
+  function updateMap(){if(!origin||!dest||!GMAPS_KEY)return;const mA=`color:blue%7Clabel:A%7C${origin.lat},${origin.lng}`;const mB=`color:red%7Clabel:B%7C${dest.lat},${dest.lng}`;const path=`${origin.lat},${origin.lng}|${dest.lat},${dest.lng}`;const url=`https://maps.googleapis.com/maps/api/staticmap?size=400x300&markers=${mA}&markers=${mB}&path=${path}&key=${GMAPS_KEY}`;$('routeImg').src=url;$('onRouteImg').src=url;}
+
+  function callRide(){if(!origin||!dest)return alert('위치/목적지 설정');$('eta').textContent=`도착예정 ${Math.round(dist/300)}분`;$('sumFare').textContent=`요금: ₩${fare.toLocaleString()}`;$('sumDist').textContent=`${(dist/1000).toFixed(1)} km / ${Math.round(dist/300)}분`;show('match');}
+
+  $('videoInput').addEventListener('change',e=>{[...e.target.files].forEach(f=>{const url=URL.createObjectURL(f);const wrap=document.createElement('div');wrap.className='video-wrapper';const vid=document.createElement('video');vid.src=url;vid.controls=true;wrap.appendChild(vid);const cap=document.createElement('div');cap.className='caption';vCnt++;if(vCnt===1)cap.textContent='⚠️ 급정거';else if(vCnt===2)cap.textContent='⚠️ 급가속';else{cap.textContent='정상 주행';cap.classList.add('ok');}const btn=document.createElement('button');btn.className='del-btn';btn.textContent='×';btn.onclick=()=>{URL.revokeObjectURL(url);wrap.remove();};wrap.appendChild(cap);wrap.appendChild(btn);$('gallery').appendChild(wrap);vid.onplay=()=>{cap.style.display='block';setTimeout(()=>cap.style.display='none',3000);};});e.target.value='';});
+
+  const driverData=[{name:'김철수',dist:'1.2 km',fee:'₩120,000'},{name:'이영희',dist:'0.8 km',fee:'₩110,000'},{name:'박민수',dist:'2.4 km',fee:'₩150,000'}];
+  function renderDrivers(){const box=$('driverList');box.innerHTML='';driverData.forEach(d=>{const div=document.createElement('div');div.className='card';div.innerHTML=`<strong>${d.name}</strong><br>거리: ${d.dist}<br>보험료: ${d.fee}`;box.appendChild(div);});}
+
+  $('locBtn').onclick=getLocation;
+  $('dest
