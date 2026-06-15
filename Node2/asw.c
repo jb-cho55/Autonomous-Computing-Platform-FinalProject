@@ -54,8 +54,8 @@ TASK(ReadCAN)
 
 
 	camera   = (uint8_t)decrypted[0];
-    lidar    = ((uint16_t)decrypted[1] << 8) | (uint16_t)decrypted[2];
-    throttle = ((uint16_t)decrypted[3] << 8) | (uint16_t)decrypted[4];
+    throttle = ((uint16_t)decrypted[1] << 8) | (uint16_t)decrypted[2];
+    lidar    = ((uint16_t)decrypted[3] << 8) | (uint16_t)decrypted[4];
 
     printfSerial("thr: %u ", throttle);
 	printfSerial("lidar: %u ", lidar);
