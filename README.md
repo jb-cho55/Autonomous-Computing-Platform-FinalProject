@@ -15,27 +15,7 @@
 
 ## 🏗️ 시스템 아키텍처
 
-```mermaid
-flowchart LR
-    subgraph N1["① Node1 — 센서 ECU (Arduino)"]
-        S1["스로틀(A1)·라이다(A2)<br/>버튼 5방향(A0)"]
-        E1["DES 암호화 encrypt()<br/>서명자리 [5:7]=0"]
-        S1 --> E1
-    end
-    subgraph GW["② Orin Nano — 보안 게이트웨이 (OP-TEE) *"]
-        W["CAN ID 화이트리스트 검증<br/>set_whitelist(0x123)"]
-        SG["3-byte 서명 생성<br/>ID 변환 0x123 → 0x456"]
-        W --> SG
-    end
-    subgraph N2["③ Node2 — 제어 ECU (Arduino)"]
-        V2["RSA 서명검증 micro_verify()<br/>DES 복호화 decrypt()"]
-        C2["차량 모델 control_rpm()"]
-        V2 --> C2
-    end
-    E1 -->|"CAN 0x123"| W
-    SG -->|"CAN 0x456"| V2
-    C2 --> R(["엔진 RPM 출력"])
-```
+![시스템 아키텍처](assets/images/architecture.svg)
 
 <sub>\* Orin Nano OP-TEE Trusted Application 코드는 본 저장소 범위 밖(별도 관리)</sub>
 
@@ -64,6 +44,8 @@ flowchart LR
 
 ## 📡 CAN 프레임 포맷 (8 byte)
 
+![CAN 프레임 바이트 구성](assets/images/can-frame.svg)
+
 페이로드 5바이트(센서 데이터)는 두 구간 모두 동일하게 암호화되어 있고, 게이트웨이를 거치며 뒤 3바이트에 서명이 채워집니다.
 
 | 바이트 | 필드 | ① Node1 → Orin (`0x123`) | ② Orin → Node2 (`0x456`) |
@@ -73,7 +55,28 @@ flowchart LR
 | `[3:4]` | lidar | 라이다 ADC 16-bit (암호화됨) | 〃 |
 | `[5:7]` | signature | `0x00 00 00` (서명자리 비움) | **OP-TEE가 생성한 3-byte 서명** |
 
-> 원본 평문 레이아웃: `[0]`=camera(0:None/Down,1:Front/Up,2:Left,3:Right), `[1:2]`=throttle, `[3:4]`=lidar (모두 big-endian)
+> 원본 평문 레이아웃: `[0]`=camera(0:None/Down, 1:Front/Up, 2:Left, 3:Right), `[1:2]`=throttle, `[3:4]`=lidar (16-bit big-endian)
+
+**바이트 분할 (byte-split)**
+
+송신측은 16-bit ADC 값을 상·하위 두 바이트로 쪼개 프레임에 싣고, 수신측은 복호화 후 두 바이트를 다시 16-bit로 합칩니다.
+
+```c
+// 송신 — Node1/asw.c
+buf_send[0] =  camera_adc        & 0xff;   // [0] 카메라 방향
+buf_send[1] = (throttle_adc >> 8) & 0xff;  // [1] throttle 상위 바이트
+buf_send[2] =  throttle_adc       & 0xff;  // [2] throttle 하위 바이트
+buf_send[3] = (lidar_adc >> 8) & 0xff;     // [3] lidar 상위 바이트
+buf_send[4] =  lidar_adc       & 0xff;     // [4] lidar 하위 바이트
+buf_send[5] = buf_send[6] = buf_send[7] = 0; // [5:7] 서명자리(0으로 초기화)
+
+// 수신 — Node2/asw.c (복호화 후 재조립)
+camera   =  decrypted[0];
+lidar    = (decrypted[1] << 8) | decrypted[2];
+throttle = (decrypted[3] << 8) | decrypted[4];
+```
+
+> ⚠️ **주의:** 송신(Node1)은 `[1:2]=throttle / [3:4]=lidar` 순서로 싣지만, 위 수신(Node2) 복원 코드는 `[1:2]=lidar / [3:4]=throttle` 로 읽어 **두 필드의 순서가 어긋나** 있습니다. 중간 게이트웨이(OP-TEE) 단에서 매핑을 맞추거나, 한쪽 코드의 정정이 필요한 부분입니다.
 
 **처리 흐름**
 1. **Node1**: 센서값을 프레임에 적재 → 앞 5바이트(`[0:5]`)를 DES 암호화, 서명자리(`[5:7]`)는 `0` → `10ms` 주기 알람으로 CAN `0x123` 송신

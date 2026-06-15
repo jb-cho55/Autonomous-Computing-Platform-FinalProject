@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 380" font-family="'Segoe UI','Malgun Gothic','Apple SD Gothic Neo',sans-serif">
+  <rect width="920" height="380" fill="#fbfbfc"/>
+  <text x="460" y="38" text-anchor="middle" font-size="21" font-weight="700" fill="#263238">CAN 데이터 프레임 — 바이트 구성 (8 byte)</text>
+
+  <!-- 바이트 인덱스 눈금 -->
+  <text x="105" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">byte 0</text>
+  <text x="195" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">1</text>
+  <text x="285" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">2</text>
+  <text x="375" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">3</text>
+  <text x="465" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">4</text>
+  <text x="555" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">5</text>
+  <text x="645" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">6</text>
+  <text x="735" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#90a4ae">7</text>
+
+  <!-- 필드 박스 (byte0=60~150, throttle 150~330, lidar 330~510, signature 510~780) -->
+  <rect x="60"  y="90" width="90"  height="84" rx="6" fill="#fff8d6" stroke="#f9a825" stroke-width="1.8"/>
+  <rect x="150" y="90" width="180" height="84" rx="6" fill="#d6e9ff" stroke="#1e88e5" stroke-width="1.8"/>
+  <rect x="330" y="90" width="180" height="84" rx="6" fill="#d6f3da" stroke="#43a047" stroke-width="1.8"/>
+  <rect x="510" y="90" width="270" height="84" rx="6" fill="#ffe0d1" stroke="#ef6c00" stroke-width="1.8"/>
+
+  <!-- 바이트 경계 점선 -->
+  <line x1="240" y1="90" x2="240" y2="174" stroke="#1e88e5" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+  <line x1="420" y1="90" x2="420" y2="174" stroke="#43a047" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+  <line x1="600" y1="90" x2="600" y2="174" stroke="#ef6c00" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+  <line x1="690" y1="90" x2="690" y2="174" stroke="#ef6c00" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+
+  <!-- 필드 라벨 -->
+  <text x="105" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#5d4037">camera</text>
+  <text x="105" y="138" text-anchor="middle" font-size="11" fill="#795548">[0]</text>
+  <text x="105" y="156" text-anchor="middle" font-size="10" fill="#8d6e63">방향 0~3</text>
+
+  <text x="240" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#0d47a1">throttle</text>
+  <text x="240" y="138" text-anchor="middle" font-size="11" fill="#1565c0">[1:2]</text>
+  <text x="240" y="156" text-anchor="middle" font-size="10" fill="#1976d2">16-bit ADC</text>
+
+  <text x="420" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#1b5e20">lidar</text>
+  <text x="420" y="138" text-anchor="middle" font-size="11" fill="#2e7d32">[3:4]</text>
+  <text x="420" y="156" text-anchor="middle" font-size="10" fill="#388e3c">16-bit ADC</text>
+
+  <text x="645" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="#bf360c">signature</text>
+  <text x="645" y="138" text-anchor="middle" font-size="11" fill="#d84315">[5:7]</text>
+  <text x="645" y="156" text-anchor="middle" font-size="10" fill="#e64a19">3-byte 서명</text>
+
+  <!-- 암호화 / 서명 브래킷 -->
+  <path d="M60,186 L60,194 L510,194 L510,186" fill="none" stroke="#5c6bc0" stroke-width="1.6"/>
+  <text x="285" y="212" text-anchor="middle" font-size="12" font-weight="600" fill="#3949ab">🔒 DES 암호화 — 40-bit(5-byte) 블록  [0:5]</text>
+
+  <path d="M510,186 L510,194 L780,194 L780,186" fill="none" stroke="#ef6c00" stroke-width="1.6"/>
+  <text x="645" y="212" text-anchor="middle" font-size="12" font-weight="600" fill="#e65100">✍ OP-TEE 서명 영역  [5:8]</text>
+
+  <!-- 두 구간 비교 -->
+  <rect x="60" y="236" width="720" height="50" rx="8" fill="#eceff1" stroke="#90a4ae" stroke-width="1.5"/>
+  <text x="80" y="258" font-size="12.5" font-weight="700" fill="#37474f">① CAN 0x123  (Node1 → Orin)</text>
+  <text x="80" y="277" font-size="11.5" fill="#546e7a">byte[0:5] 암호문   ·   byte[5:7] = 00 00 00  (서명자리 비움)</text>
+
+  <rect x="60" y="296" width="720" height="50" rx="8" fill="#fff3e0" stroke="#ffb74d" stroke-width="1.5"/>
+  <text x="80" y="318" font-size="12.5" font-weight="700" fill="#bf360c">② CAN 0x456  (Orin → Node2)</text>
+  <text x="80" y="337" font-size="11.5" fill="#a1480e">byte[0:5] 암호문   ·   byte[5:7] = 3-byte OP-TEE 서명</text>
+</svg>
